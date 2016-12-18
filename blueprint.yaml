@@ -1,0 +1,55 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/3.4/types.yaml
+  - http://www.getcloudify.org/spec/fabric-plugin/1.4/plugin.yaml
+
+inputs:
+
+  agent_user:
+    default: ubuntu
+
+  agent_key_path:
+    default: ~/.ssh/kubernetes-aws-key.pem 
+
+  kubernetes_master_ip:
+    type: string
+
+node_types:
+
+  kubernetes.application:
+    derived_from: cloudify.nodes.ApplicationServer
+    properties:
+      config_path:
+        type: string
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: fabric.fabric_plugin.tasks.run_task
+          inputs:
+            tasks_file:
+              default: scripts/kubernetes.py
+            task_name:
+              default: start_app
+            task_properties:
+              default:
+                command: '/usr/local/bin/kubectl create -f'
+                config_path: { get_property: [ SELF, config_path ] }
+                filepath_agent: { concat: [ '/home/', { get_input: agent_user }, '/', { get_property: [ SELF, config_path ] } ] }
+            fabric_env:
+              default:
+                host_string: { get_input: kubernetes_master_ip }
+                user: { get_input: agent_user }
+                key_filename: { get_input: agent_key_path }
+
+node_templates:
+
+  mongo_server:
+    type: kubernetes.application
+    properties:
+      config_path: 'mongo-service.yaml'
+
+  mongo_controller:
+    type: kubernetes.application
+    properties:
+      config_path: 'mongo-controller.yaml'
